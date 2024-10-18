@@ -1,0 +1,221 @@
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <title>折り紙</title>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.167.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.167.0/examples/jsm/",
+          "three/addons/controls/OrbitControls.js": "https://cdn.jsdelivr.net/npm/three@0.167.0/examples/jsm/controls/OrbitControls.js",
+          "three/addons/geometries/TextGeometry.js": "https://cdn.jsdelivr.net/npm/three@0.167.0/examples/jsm/geometries/TextGeometry.js",
+          "three/addons/loaders/FontLoader.js": "https://cdn.jsdelivr.net/npm/three@0.167.0/examples/jsm/loaders/FontLoader.js"
+        }
+      }
+    </script>
+    <script type="module">
+      import * as THREE from "three";
+      import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+      const container = document.querySelector(".container");
+      const canvasEl = document.querySelector("#canvas");
+
+      let boards = {
+        params: {
+          width: 36,
+          height: 36,
+        },
+        els: {
+          group: new THREE.Group(),
+          fixBoard: new THREE.Mesh(),
+          moveBoard: new THREE.Mesh(),
+        },
+        animated: {
+          foldingAngle: 0.02 * Math.PI, // 折りたたむ角度、単位はラジアン
+        },
+      };
+
+      let renderer, scene, camera, orbit;
+
+      initScene();
+      window.addEventListener("resize", updateSceneSize);
+
+      function initScene() {
+        renderer = new THREE.WebGLRenderer({
+          alpha: true,
+          antialias: true,
+          canvas: canvasEl,
+        });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+        scene = new THREE.Scene();
+
+        camera = new THREE.PerspectiveCamera(
+          40,
+          container.clientWidth / container.clientHeight,
+          10,
+          1000
+        );
+        camera.position.set(0, 0, 2).multiplyScalar(70);
+
+        updateSceneSize();
+        addAxesAndOrbitControls();
+
+        // 2枚の板を生成
+        scene.add(boards.els.group);
+        setGeometryForBoards();
+
+        const materials = [
+          new THREE.MeshBasicMaterial({
+            color: new THREE.Color(0xff0000),
+            wireframe: true,
+          }),
+          new THREE.MeshBasicMaterial({
+            color: new THREE.Color(0x0000ff),
+            wireframe: true,
+          }),
+        ];
+        boards.els.fixBoard.material = materials[0];
+        boards.els.moveBoard.material = materials[1];
+
+        createBoardElements();
+
+        render();
+      }
+
+      function addAxesAndOrbitControls() {
+        // 軸の設定
+        const lineMaterial = new THREE.LineBasicMaterial({ color: 0x000000 });
+        const lineGeometry = new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(-1000, 0, 0),
+          new THREE.Vector3(1000, 0, 0),
+        ]);
+        const line = new THREE.Line(lineGeometry, lineMaterial);
+        scene.add(line);
+
+        // OrbitControlsの設定
+        orbit = new OrbitControls(camera, canvasEl);
+        orbit.enableZoom = false;
+        orbit.enableDamping = true;
+        orbit.autoRotate = false;
+        orbit.autoRotateSpeed = 0.25;
+      }
+
+      function render() {
+        orbit.update();
+        renderer.render(scene, camera);
+        requestAnimationFrame(render);
+      }
+
+      // ウィンドウサイズが変更されたときに呼び出される
+      function updateSceneSize() {
+        camera.aspect = container.clientWidth / container.clientHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(container.clientWidth, container.clientHeight);
+      }
+
+      // 2つの板をグループに追加
+      function setGeometryForBoards() {
+        boards.els.group.add(boards.els.fixBoard, boards.els.moveBoard);
+      }
+
+      // 板のジオメトリを設定
+      function createBoardElements() {
+        const fixBoardVertices = new Float32Array([
+          0,
+          Math.sqrt(boards.params.width ** 2 + boards.params.height ** 2) / 2,
+          0,
+          -Math.sqrt(boards.params.width ** 2 + boards.params.height ** 2) / 2,
+          0,
+          0,
+          0,
+          -Math.sqrt(boards.params.width ** 2 + boards.params.height ** 2) / 2,
+          0,
+        ]);
+
+        const moveBoardVertices = new Float32Array([
+          0,
+          Math.sqrt(boards.params.width ** 2 + boards.params.height ** 2) / 2,
+          0,
+          Math.sqrt(boards.params.width ** 2 + boards.params.height ** 2) / 2,
+          0,
+          0,
+          0,
+          -Math.sqrt(boards.params.width ** 2 + boards.params.height ** 2) / 2,
+          0,
+        ]);
+
+        boards.els.fixBoard.geometry = new THREE.BufferGeometry();
+        boards.els.fixBoard.geometry.setAttribute(
+          "position",
+          new THREE.BufferAttribute(fixBoardVertices, 3)
+        );
+
+        boards.els.moveBoard.geometry = new THREE.BufferGeometry();
+        boards.els.moveBoard.geometry.setAttribute(
+          "position",
+          new THREE.BufferAttribute(moveBoardVertices, 3)
+        );
+
+        updateBoardsTransform();
+      }
+
+      // 折り率に応じて板を折りたたむ
+      function updateBoardsTransform() {
+        boards.els.moveBoard.rotation.y = -boards.animated.foldingAngle;
+      }
+
+      const rangebar = document.getElementById("rangebar");
+
+      rangebar.addEventListener("input", (e) => {
+        const value = e.target.value;
+        boards.animated.foldingAngle = value * (Math.PI / 180);
+        console.log(boards.animated.foldingAngle);
+        updateBoardsTransform();
+      });
+    </script>
+  </head>
+  <body>
+    <div class="page">
+      <div class="container">
+        <canvas id="canvas"></canvas>
+        <div class="ui-controls">
+          0<input
+            type="range"
+            name="radius"
+            aria-label="折りたたむ角度"
+            min="0"
+            max="180"
+            value="0"
+            id="rangebar"
+          />180
+        </div>
+      </div>
+    </div>
+  </body>
+  <style>
+    body {
+      padding: 0;
+      margin: 0;
+    }
+    .page {
+      width: 100%;
+      height: 100vh;
+    }
+    .container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100vh;
+    }
+    .container .ui-controls {
+      position: absolute;
+      top: 70%;
+      left: 70%;
+      user-select: none;
+      font-family: sans-serif;
+      text-align: end;
+    }
+  </style>
+</html>

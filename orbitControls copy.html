@@ -1,0 +1,86 @@
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.167.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.167.0/examples/jsm/",
+          "three/addons/controls/OrbitControls.js": "https://cdn.jsdelivr.net/npm/three@0.167.0/examples/jsm/controls/OrbitControls.js"
+        }
+      }
+    </script>
+    <script type="module">
+      import * as THREE from "three";
+      import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+      import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
+
+      // サイズを指定
+      const width = 960;
+      const height = 540;
+
+      const renderer = new THREE.WebGLRenderer({
+        canvas: document.querySelector("#myCanvas"),
+      });
+      renderer.setSize(width, height);
+
+      // シーンを作成
+      const scene = new THREE.Scene();
+
+      // カメラを作成
+      const camera = new THREE.PerspectiveCamera(45, width / height, 1, 10000);
+      camera.position.set(0, 0, 200);
+
+      const controls = new OrbitControls(camera, document.body);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.2;
+
+      // 折り曲げ用の平面ジオメトリを作成
+      const planeSize = 50;
+      const foldAngle = Math.PI / 2; // 90度 (π/2)
+
+      // 左側の平面
+      const leftGeometry = new THREE.PlaneGeometry(planeSize, planeSize);
+      leftGeometry.translate(-planeSize / 2, 0, 0); // 左に移動
+
+      // 右側の平面を90度折り曲げ
+      const rightGeometry = new THREE.PlaneGeometry(planeSize, planeSize);
+      rightGeometry.translate(planeSize / 2, 0, 0); // 右に移動
+      rightGeometry.rotateY(foldAngle); // 90度回転
+
+      // 2つの平面を結合
+      const foldedGeometry = mergeGeometries(
+        [leftGeometry, rightGeometry],
+        true
+      );
+
+      // マテリアルを定義（表が赤、裏が白）
+      const materials = [
+        new THREE.MeshBasicMaterial({ color: "red", side: THREE.DoubleSide }),
+        new THREE.MeshBasicMaterial({ color: "white", side: THREE.DoubleSide }),
+      ];
+
+      // メッシュを作成
+      const foldedMesh = new THREE.Mesh(foldedGeometry, materials);
+
+      // シーンにメッシュを追加
+      scene.add(foldedMesh);
+
+      // 平行光源を作成
+      const directionalLight = new THREE.DirectionalLight(0xffffff);
+      directionalLight.position.set(1, 1, 1);
+      scene.add(directionalLight);
+
+      // 描画ループ
+      tick();
+      function tick() {
+        controls.update();
+        renderer.render(scene, camera);
+        requestAnimationFrame(tick);
+      }
+    </script>
+  </head>
+  <body>
+    <canvas id="myCanvas"></canvas>
+  </body>
+</html>
