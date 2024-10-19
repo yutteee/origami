@@ -22,7 +22,7 @@
 
       // パラメータを入力 -------------------------------------------------------------------
 
-      let boards = {
+      let origami = {
         params: {
           width: 36,
           height: 36,
@@ -41,12 +41,12 @@
       };
 
       const tan = Math.tan(Math.PI / 8);
-      const basicWidthAndHeight = boards.params.width;
+      const basicWidthAndHeight = origami.params.width;
 
       const board1 = [
-        [basicWidthAndHeight * tan, 0, 0],
-        [basicWidthAndHeight * tan, basicWidthAndHeight, 0],
         [basicWidthAndHeight * (tan - 1), 0, 0],
+        [basicWidthAndHeight * tan, basicWidthAndHeight, 0],
+        [basicWidthAndHeight * tan, 0, 0],
       ];
 
       const board2 = [
@@ -57,16 +57,21 @@
 
       const board3 = [
         [0, 0, 0],
-        [basicWidthAndHeight * tan, basicWidthAndHeight, 0],
         [basicWidthAndHeight * tan, 0, 0],
+        [basicWidthAndHeight * tan, basicWidthAndHeight, 0],
       ];
+
+      const boards = {
+        fixBoards: [board1, board2],
+        moveBoards: [board3],
+      };
 
       // 回転軸を設定
       // board3の1番目の頂点から0番目の頂点へのベクトルを回転軸とする
       const rotateAxis = new THREE.Vector3(
-        board3[1][0] - board3[0][0],
-        board3[1][1] - board3[0][1],
-        board3[1][2] - board3[0][2]
+        board3[2][0] - board3[0][0],
+        board3[2][1] - board3[0][1],
+        board3[2][2] - board3[0][2]
       ).normalize();
 
       // -------------------------------------------------------------------
@@ -97,27 +102,8 @@
         updateSceneSize();
         addAxesAndOrbitControls();
 
-        scene.add(boards.els.origami);
+        scene.add(origami.els.origami);
         setGeometryForBoards();
-
-        // TODO: 板に表裏つけれるようにする
-        const materials = [
-          new THREE.MeshBasicMaterial({
-            color: new THREE.Color(0xff0000),
-            wireframe: true,
-          }),
-          new THREE.MeshBasicMaterial({
-            color: new THREE.Color(0x0000ff),
-            wireframe: true,
-          }),
-          new THREE.MeshBasicMaterial({
-            color: new THREE.Color(0x00ff00),
-            wireframe: true,
-          }),
-        ];
-        boards.els.board1.material = materials[0];
-        boards.els.board2.material = materials[1];
-        boards.els.board3.material = materials[2];
 
         createBoardElements();
 
@@ -125,14 +111,9 @@
       }
 
       function addAxesAndOrbitControls() {
-        // 軸の設定
-        const lineMaterial = new THREE.LineBasicMaterial({ color: 0x000000 });
-        const lineGeometry = new THREE.BufferGeometry().setFromPoints([
-          new THREE.Vector3(-1000, 0, 0),
-          new THREE.Vector3(1000, 0, 0),
-        ]);
-        const line = new THREE.Line(lineGeometry, lineMaterial);
-        scene.add(line);
+        // x, y, z軸を表示
+        const axesHelper = new THREE.AxesHelper(1000);
+        scene.add(axesHelper);
 
         // OrbitControlsの設定
         orbit = new OrbitControls(camera, canvasEl);
@@ -155,38 +136,133 @@
         renderer.setSize(container.clientWidth, container.clientHeight);
       }
 
-      // TODO: このへんは関数化して考えなくても良いようにできそう
-      // それぞれの板をグループに追加
+      // それぞれの板を動く板と固定板のグループに追加
       function setGeometryForBoards() {
-        boards.els.fixGroup.add(boards.els.board1);
-        boards.els.fixGroup.add(boards.els.board2);
-        boards.els.moveGroup.add(boards.els.board3);
-        boards.els.origami.add(boards.els.fixGroup, boards.els.moveGroup);
+        boards.fixBoards.forEach((board, index) => {
+          origami.els.fixGroup.add(origami.els[`board${index + 1}`]);
+        });
+        boards.moveBoards.forEach((board, index) => {
+          origami.els.moveGroup.add(
+            origami.els[`board${boards.fixBoards.length + index + 1}`]
+          );
+        });
+        origami.els.origami.add(origami.els.fixGroup, origami.els.moveGroup);
       }
 
       // 板のジオメトリを設定
       function createBoardElements() {
-        const board1Vertices = new Float32Array(board1.flat());
-        const board2Vertices = new Float32Array(board2.flat());
-        const board3Vertices = new Float32Array(board3.flat());
+        boards.fixBoards.forEach((board, index) => {
+          const vertices = new Float32Array(board.flat());
+          origami.els[`board${index + 1}`].geometry =
+            new THREE.BufferGeometry();
+          origami.els[`board${index + 1}`].geometry.setAttribute(
+            "position",
+            new THREE.BufferAttribute(vertices, 3)
+          );
+        });
 
-        boards.els.board1.geometry = new THREE.BufferGeometry();
-        boards.els.board1.geometry.setAttribute(
-          "position",
-          new THREE.BufferAttribute(board1Vertices, 3)
-        );
+        boards.moveBoards.forEach((board, index) => {
+          const vertices = new Float32Array(board.flat());
+          origami.els[`board${boards.fixBoards.length + index + 1}`].geometry =
+            new THREE.BufferGeometry();
+          origami.els[
+            `board${boards.fixBoards.length + index + 1}`
+          ].geometry.setAttribute(
+            "position",
+            new THREE.BufferAttribute(vertices, 3)
+          );
+        });
 
-        boards.els.board2.geometry = new THREE.BufferGeometry();
-        boards.els.board2.geometry.setAttribute(
-          "position",
-          new THREE.BufferAttribute(board2Vertices, 3)
-        );
+        // const board1Vertices = new Float32Array(board1.flat());
+        // const board2Vertices = new Float32Array(board2.flat());
+        // const board3Vertices = new Float32Array(board3.flat());
 
-        boards.els.board3.geometry = new THREE.BufferGeometry();
-        boards.els.board3.geometry.setAttribute(
-          "position",
-          new THREE.BufferAttribute(board3Vertices, 3)
-        );
+        // origami.els.board1.geometry = new THREE.BufferGeometry();
+        // origami.els.board1.geometry.setAttribute(
+        //   "position",
+        //   new THREE.BufferAttribute(board1Vertices, 3)
+        // );
+
+        // origami.els.board2.geometry = new THREE.BufferGeometry();
+        // origami.els.board2.geometry.setAttribute(
+        //   "position",
+        //   new THREE.BufferAttribute(board2Vertices, 3)
+        // );
+
+        // origami.els.board3.geometry = new THREE.BufferGeometry();
+        // origami.els.board3.geometry.setAttribute(
+        //   "position",
+        //   new THREE.BufferAttribute(board3Vertices, 3)
+        // );
+
+        const frontMaterial = new THREE.MeshBasicMaterial({
+          color: new THREE.Color(0xff0000),
+          wireframe: false,
+          side: THREE.FrontSide,
+        });
+        // 片方wireframeにする,
+        // 重なった時に色が重なる時がある、折り目がわかったほうがいいため
+        const backMaterial = new THREE.MeshBasicMaterial({
+          color: new THREE.Color(0xa9a9a9),
+          wireframe: true,
+          side: THREE.BackSide,
+        });
+
+        boards.fixBoards.forEach((board, index) => {
+          const frontMesh = new THREE.Mesh(
+            origami.els[`board${index + 1}`].geometry,
+            frontMaterial
+          );
+          const backMesh = new THREE.Mesh(
+            origami.els[`board${index + 1}`].geometry,
+            backMaterial
+          );
+          origami.els.fixGroup.add(frontMesh, backMesh);
+        });
+
+        boards.moveBoards.forEach((board, index) => {
+          const frontMesh = new THREE.Mesh(
+            origami.els[`board${boards.fixBoards.length + index + 1}`].geometry,
+            frontMaterial
+          );
+          const backMesh = new THREE.Mesh(
+            origami.els[`board${boards.fixBoards.length + index + 1}`].geometry,
+            backMaterial
+          );
+          origami.els.moveGroup.add(frontMesh, backMesh);
+        });
+
+        // const frontMesh1 = new THREE.Mesh(
+        //   origami.els.board1.geometry,
+        //   frontMaterial
+        // );
+        // const backMesh1 = new THREE.Mesh(
+        //   origami.els.board1.geometry,
+        //   backMaterial
+        // );
+
+        // const frontMesh2 = new THREE.Mesh(
+        //   origami.els.board2.geometry,
+        //   backMaterial
+        // );
+        // const backMesh2 = new THREE.Mesh(
+        //   origami.els.board2.geometry,
+        //   frontMaterial
+        // );
+
+        // const frontMesh3 = new THREE.Mesh(
+        //   origami.els.board3.geometry,
+        //   frontMaterial
+        // );
+
+        // const backMesh3 = new THREE.Mesh(
+        //   origami.els.board3.geometry,
+        //   backMaterial
+        // );
+
+        // origami.els.fixGroup.add(frontMesh1, backMesh1);
+        // origami.els.fixGroup.add(frontMesh2, backMesh2);
+        // origami.els.moveGroup.add(frontMesh3, backMesh3);
 
         updateBoardsTransform();
       }
@@ -194,16 +270,16 @@
       // 折り率に応じて板を折りたたむ(回転する)
       function updateBoardsTransform() {
         const quaternion = new THREE.Quaternion();
-        quaternion.setFromAxisAngle(rotateAxis, boards.animated.foldingAngle);
-        boards.els.moveGroup.setRotationFromQuaternion(quaternion);
+        quaternion.setFromAxisAngle(rotateAxis, origami.animated.foldingAngle);
+        origami.els.moveGroup.setRotationFromQuaternion(quaternion);
       }
 
       const rangebar = document.getElementById("rangebar");
 
       rangebar.addEventListener("input", (e) => {
         const value = e.target.value;
-        boards.animated.foldingAngle = value * (Math.PI / 180);
-        console.log(boards.animated.foldingAngle);
+        origami.animated.foldingAngle = -value * (Math.PI / 180);
+        console.log(origami.animated.foldingAngle);
         updateBoardsTransform();
       });
     </script>

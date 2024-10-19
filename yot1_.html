@@ -42,7 +42,7 @@
       const tan = Math.tan(Math.PI / 8);
       const basicWidthAndHeight = boards.params.width;
 
-      // 座標の指定は右回りにする。左回りだと裏面になり色が逆になる。
+      // CAUTION: 座標の指定は表面のものは右回り、裏面のものは左回りで指定する
       const board1 = [
         [0, 0, 0],
         [basicWidthAndHeight, basicWidthAndHeight, 0],
@@ -56,6 +56,7 @@
 
       // 回転軸を設定
       // board2の2番目の頂点から0番目の頂点へのベクトルを回転軸とする
+      // CAUTION: 回転軸は原点を通っている必要がある
       const rotateAxis = new THREE.Vector3(
         board2[2][0] - board2[0][0],
         board2[2][1] - board2[0][1],
@@ -159,8 +160,8 @@
         // 片方wireframeにする,
         // 重なった時に色が重なる時がある、折り目がわかったほうがいいため
         const backMaterial = new THREE.MeshBasicMaterial({
-          color: new THREE.Color(0x000000),
-          wireframe: true,
+          color: new THREE.Color(0xa9a9a9),
+          wireframe: false,
           side: THREE.BackSide,
         });
 
