@@ -20,6 +20,8 @@
       const container = document.querySelector(".container");
       const canvasEl = document.querySelector("#canvas");
 
+      // パラメータを入力 -------------------------------------------------------------------
+
       let boards = {
         params: {
           width: 36,
@@ -29,13 +31,45 @@
           origami: new THREE.Group(),
           fixGroup: new THREE.Group(),
           moveGroup: new THREE.Group(),
-          board1: new THREE.Mesh(), // 赤い板
-          board2: new THREE.Mesh(), // 青い板
+          board1: new THREE.Mesh(),
+          board2: new THREE.Mesh(),
+          board3: new THREE.Mesh(),
         },
         animated: {
           foldingAngle: 0, // 折りたたむ角度、単位はラジアン
         },
       };
+
+      const tan = Math.tan(Math.PI / 8);
+      const basicWidthAndHeight = boards.params.width;
+
+      const board1 = [
+        [basicWidthAndHeight * tan, 0, 0],
+        [basicWidthAndHeight * tan, basicWidthAndHeight, 0],
+        [basicWidthAndHeight * (tan - 1), 0, 0],
+      ];
+
+      const board2 = [
+        [basicWidthAndHeight * (tan - 1), 0, 0],
+        [0, 0, 0],
+        [basicWidthAndHeight * tan, basicWidthAndHeight, 0],
+      ];
+
+      const board3 = [
+        [0, 0, 0],
+        [basicWidthAndHeight * tan, basicWidthAndHeight, 0],
+        [basicWidthAndHeight * tan, 0, 0],
+      ];
+
+      // 回転軸を設定
+      // board3の1番目の頂点から0番目の頂点へのベクトルを回転軸とする
+      const rotateAxis = new THREE.Vector3(
+        board3[1][0] - board3[0][0],
+        board3[1][1] - board3[0][1],
+        board3[1][2] - board3[0][2]
+      ).normalize();
+
+      // -------------------------------------------------------------------
 
       let renderer, scene, camera, orbit;
 
@@ -63,10 +97,10 @@
         updateSceneSize();
         addAxesAndOrbitControls();
 
-        // 2枚の板を生成
         scene.add(boards.els.origami);
         setGeometryForBoards();
 
+        // TODO: 板に表裏つけれるようにする
         const materials = [
           new THREE.MeshBasicMaterial({
             color: new THREE.Color(0xff0000),
@@ -76,9 +110,14 @@
             color: new THREE.Color(0x0000ff),
             wireframe: true,
           }),
+          new THREE.MeshBasicMaterial({
+            color: new THREE.Color(0x00ff00),
+            wireframe: true,
+          }),
         ];
         boards.els.board1.material = materials[0];
         boards.els.board2.material = materials[1];
+        boards.els.board3.material = materials[2];
 
         createBoardElements();
 
@@ -116,57 +155,47 @@
         renderer.setSize(container.clientWidth, container.clientHeight);
       }
 
-      // 2つの板をグループに追加
+      // TODO: このへんは関数化して考えなくても良いようにできそう
+      // それぞれの板をグループに追加
       function setGeometryForBoards() {
         boards.els.fixGroup.add(boards.els.board1);
-        boards.els.moveGroup.add(boards.els.board2);
+        boards.els.fixGroup.add(boards.els.board2);
+        boards.els.moveGroup.add(boards.els.board3);
         boards.els.origami.add(boards.els.fixGroup, boards.els.moveGroup);
       }
 
       // 板のジオメトリを設定
       function createBoardElements() {
-        const fixBoardVertices = new Float32Array([
-          0,
-          Math.sqrt(boards.params.width ** 2 + boards.params.height ** 2) / 2,
-          0,
-          -Math.sqrt(boards.params.width ** 2 + boards.params.height ** 2) / 2,
-          0,
-          0,
-          0,
-          -Math.sqrt(boards.params.width ** 2 + boards.params.height ** 2) / 2,
-          0,
-        ]);
-
-        const moveBoardVertices = new Float32Array([
-          0,
-          Math.sqrt(boards.params.width ** 2 + boards.params.height ** 2) / 2,
-          0,
-          Math.sqrt(boards.params.width ** 2 + boards.params.height ** 2) / 2,
-          0,
-          0,
-          0,
-          -Math.sqrt(boards.params.width ** 2 + boards.params.height ** 2) / 2,
-          0,
-        ]);
+        const board1Vertices = new Float32Array(board1.flat());
+        const board2Vertices = new Float32Array(board2.flat());
+        const board3Vertices = new Float32Array(board3.flat());
 
         boards.els.board1.geometry = new THREE.BufferGeometry();
         boards.els.board1.geometry.setAttribute(
           "position",
-          new THREE.BufferAttribute(fixBoardVertices, 3)
+          new THREE.BufferAttribute(board1Vertices, 3)
         );
 
         boards.els.board2.geometry = new THREE.BufferGeometry();
         boards.els.board2.geometry.setAttribute(
           "position",
-          new THREE.BufferAttribute(moveBoardVertices, 3)
+          new THREE.BufferAttribute(board2Vertices, 3)
+        );
+
+        boards.els.board3.geometry = new THREE.BufferGeometry();
+        boards.els.board3.geometry.setAttribute(
+          "position",
+          new THREE.BufferAttribute(board3Vertices, 3)
         );
 
         updateBoardsTransform();
       }
 
-      // 折り率に応じて板を折りたたむ
+      // 折り率に応じて板を折りたたむ(回転する)
       function updateBoardsTransform() {
-        boards.els.moveGroup.rotation.y = -boards.animated.foldingAngle;
+        const quaternion = new THREE.Quaternion();
+        quaternion.setFromAxisAngle(rotateAxis, boards.animated.foldingAngle);
+        boards.els.moveGroup.setRotationFromQuaternion(quaternion);
       }
 
       const rangebar = document.getElementById("rangebar");
