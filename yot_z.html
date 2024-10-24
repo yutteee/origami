@@ -16,7 +16,8 @@
     <script type="module">
       import * as THREE from "three";
       import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-      import { procedure } from "./procedure.js";
+      // import { procedure } from "./models/yot_z.js";
+      import { procedure } from "./models/airplane.js";
 
       const container = document.querySelector(".container");
       const canvasEl = document.querySelector("#canvas");
@@ -38,13 +39,22 @@
           board4: new THREE.Mesh(),
           board5: new THREE.Mesh(),
           board6: new THREE.Mesh(),
+          board7: new THREE.Mesh(),
+          board8: new THREE.Mesh(),
+          board9: new THREE.Mesh(),
+          board10: new THREE.Mesh(),
+          board11: new THREE.Mesh(),
+          board12: new THREE.Mesh(),
+          board13: new THREE.Mesh(),
+          board14: new THREE.Mesh(),
+          board15: new THREE.Mesh(),
         },
         animated: {
           foldingAngle: 0, // 折りたたむ角度、単位はラジアン
         },
       };
 
-      let step = 2;
+      let step = 1;
 
       const boards = {
         fixBoards: procedure[step].fixBoards,
@@ -53,10 +63,10 @@
 
       // 回転軸を設定
       const rotateAxis = new THREE.Vector3(
-        ...procedure[step].rotateAxis
+        procedure[step].rotateAxis[0][0] - procedure[step].rotateAxis[1][0],
+        procedure[step].rotateAxis[0][1] - procedure[step].rotateAxis[1][1],
+        procedure[step].rotateAxis[0][2] - procedure[step].rotateAxis[1][2]
       ).normalize();
-
-      console.log(procedure[step].rotateAxis);
 
       // -------------------------------------------------------------------
 
@@ -135,8 +145,19 @@
 
       // 座標から板のジオメトリを設定
       function createBoardElements() {
+        const origin = procedure[step].rotateAxis[0];
+
         boards.fixBoards.forEach((board, index) => {
           const vertices = new Float32Array(board.flat());
+
+          // originが[0, 0, 0]になるように平行移動
+          // 0.01を引くのは、板が重ならないようにするため。
+          for (let i = 0; i < vertices.length; i += 3) {
+            vertices[i] -= origin[0];
+            vertices[i + 1] -= origin[1];
+            vertices[i + 2] = vertices[i + 2] - origin[2] - 0.01;
+          }
+
           origami.els[`board${index + 1}`].geometry =
             new THREE.BufferGeometry();
           origami.els[`board${index + 1}`].geometry.setAttribute(
@@ -144,16 +165,25 @@
             new THREE.BufferAttribute(vertices, 3)
           );
 
-          // 4角形の場合、indexが必要
+          // 4角形以上の場合、indexが必要
           if (board.length >= 4) {
-            origami.els[`board${index + 1}`].geometry.setIndex([
-              0, 1, 2, 2, 3, 0,
-            ]);
+            const indices = [];
+            for (let i = 0; i < board.length - 2; i++) {
+              indices.push(0, i + 1, i + 2);
+            }
+            origami.els[`board${index + 1}`].geometry.setIndex(indices);
           }
         });
 
         boards.moveBoards.forEach((board, index) => {
           const vertices = new Float32Array(board.flat());
+          // originが[0, 0, 0]になるように平行移動
+          for (let i = 0; i < vertices.length; i += 3) {
+            vertices[i] -= origin[0];
+            vertices[i + 1] -= origin[1];
+            vertices[i + 2] -= origin[2];
+          }
+
           origami.els[`board${boards.fixBoards.length + index + 1}`].geometry =
             new THREE.BufferGeometry();
           origami.els[
@@ -163,11 +193,15 @@
             new THREE.BufferAttribute(vertices, 3)
           );
 
-          // 4角形の場合、indexが必要
+          // 4角形以上の場合、indexが必要
           if (board.length >= 4) {
+            const indices = [];
+            for (let i = 0; i < board.length - 2; i++) {
+              indices.push(0, i + 1, i + 2);
+            }
             origami.els[
               `board${boards.fixBoards.length + index + 1}`
-            ].geometry.setIndex([0, 1, 2, 2, 3, 0]);
+            ].geometry.setIndex(indices);
           }
         });
 
@@ -208,6 +242,11 @@
         });
 
         updateBoardsTransform();
+
+        const allBoards = getMoveBoardsPosition(Math.PI);
+        console.log(allBoards);
+
+        separateBoards(allBoards);
       }
 
       // 折り率に応じて板を折りたたむ(回転する)
@@ -215,16 +254,159 @@
         const quaternion = new THREE.Quaternion();
         quaternion.setFromAxisAngle(rotateAxis, origami.animated.foldingAngle);
         origami.els.moveGroup.setRotationFromQuaternion(quaternion);
+
+        // 各boardのワールド座標を確認
+        origami.els.moveGroup.children.forEach((board, index) => {
+          // 更新されたワールド行列を適用
+          board.updateMatrixWorld(true);
+
+          const positionAttribute = board.geometry.attributes.position;
+          const vertex = new THREE.Vector3();
+          const worldPosition = new THREE.Vector3();
+
+          // 各頂点をワールド座標に変換して表示
+          for (let i = 0; i < positionAttribute.count; i++) {
+            vertex.fromBufferAttribute(positionAttribute, i); // 頂点を取得
+            worldPosition.copy(vertex).applyMatrix4(board.matrixWorld); // ワールド座標に変換
+          }
+        });
       }
 
       const rangebar = document.getElementById("rangebar");
 
       rangebar.addEventListener("input", (e) => {
         const value = e.target.value;
-        origami.animated.foldingAngle = value * (Math.PI / 180);
-        console.log(origami.animated.foldingAngle);
+        origami.animated.foldingAngle = -value * (Math.PI / 180);
         updateBoardsTransform();
       });
+
+      // ボタンに応じて手順を変更
+      const buttons = document.querySelectorAll(".step-button");
+
+      buttons.forEach((button) => {
+        button.addEventListener("click", (e) => {
+          step = parseInt(e.target.id);
+          boards.fixBoards = procedure[step].fixBoards;
+          boards.moveBoards = procedure[step].moveBoards;
+          rotateAxis
+            .set(
+              procedure[step].rotateAxis[0][0] -
+                procedure[step].rotateAxis[1][0],
+              procedure[step].rotateAxis[0][1] -
+                procedure[step].rotateAxis[1][1],
+              procedure[step].rotateAxis[0][2] -
+                procedure[step].rotateAxis[1][2]
+            )
+            .normalize();
+          origami.els.fixGroup.clear();
+          origami.els.moveGroup.clear();
+          createBoardElements();
+        });
+      });
+
+      // 一回折った後のboardsの座標を取得
+      function getMoveBoardsPosition(angle) {
+        // すべての板を並行移動する
+        const fixBoards = [...boards.fixBoards];
+        const moveBoards = [...boards.moveBoards];
+
+        fixBoards.forEach((board) => {
+          board.forEach((vertex) => {
+            vertex[0] -= procedure[step].rotateAxis[0][0];
+            vertex[1] -= procedure[step].rotateAxis[0][1];
+            vertex[2] -= procedure[step].rotateAxis[0][2];
+          });
+        });
+
+        moveBoards.forEach((board) => {
+          board.forEach((vertex) => {
+            vertex[0] -= procedure[step].rotateAxis[0][0];
+            vertex[1] -= procedure[step].rotateAxis[0][1];
+            vertex[2] -= procedure[step].rotateAxis[0][2];
+          });
+        });
+
+        // 回転後の座標を取得
+        const movedBoards = [];
+        moveBoards.forEach((board, index) => {
+          const vertices = board.map((vertex) =>
+            rotateAroundAxis(vertex, rotateAxis, angle)
+          );
+          movedBoards.push(vertices);
+        });
+
+        // 板を重ならないようにzに0.01を加える
+        movedBoards.forEach((board) => {
+          board.forEach((vertex) => {
+            vertex[2] += 0.01;
+          });
+        });
+
+        const allBoards = [...fixBoards, ...movedBoards];
+
+        // 並行移動を戻す
+        allBoards.forEach((board) => {
+          board.forEach((vertex) => {
+            vertex[0] += procedure[step].rotateAxis[0][0];
+            vertex[1] += procedure[step].rotateAxis[0][1];
+            vertex[2] += procedure[step].rotateAxis[0][2];
+          });
+        });
+
+        // すべて小数点第1位まで表示
+        const allBoardsRounded = allBoards.map((board) =>
+          board.map((vertex) => round2Vector(vertex))
+        );
+
+        return allBoardsRounded;
+      }
+
+      // ロドリゲスの回転公式
+      function rotateAroundAxis(point, axis, angle) {
+        const [x, y, z] = point;
+        const [u, v, w] = axis;
+
+        const cosA = Math.cos(angle);
+        const sinA = Math.sin(angle);
+
+        return [
+          u * (u * x + v * y + w * z) * (1 - cosA) +
+            x * cosA +
+            (-w * y + v * z) * sinA,
+          v * (u * x + v * y + w * z) * (1 - cosA) +
+            y * cosA +
+            (w * x - u * z) * sinA,
+          w * (u * x + v * y + w * z) * (1 - cosA) +
+            z * cosA +
+            (-v * x + u * y) * sinA,
+        ];
+      }
+      // 少数点第1位まで表示
+      function round2Vector(v) {
+        return v.map((n) => Math.round(n * 100) / 100);
+      }
+
+      /* 
+      軸から、fixBoardsとmoveBoardsに分ける
+      z座標が大きいものから順に分割してmoveBoardsに入れ、もう半分をfixBoardsに入れる
+      sheetsは折る枚数で、最大のz座標〜最大のz座標 - 0.01 * sheetsまでをmoveBoardsに入れる
+
+      回転軸が板を通る場合に分割を行う。
+      この時z座標は考えず、x, y座標で分割する。
+      **/
+      function separateBoards(allBoards) {
+        const fixBoards = [];
+        const moveBoards = [];
+        const sheets = 4;
+
+        // z座標が大きい順にソート
+        allBoards.sort((a, b) => b[0][2] - a[0][2]);
+
+        // 折らない板をfixBoardsに入れる
+        fixBoards.push(allBoards.slice(sheets));
+
+        // 軸が板状にあるかどうかを判定
+      }
     </script>
   </head>
   <body>
@@ -241,6 +423,14 @@
             value="0"
             id="rangebar"
           />180
+        </div>
+        <div class="buttons">
+          <button id="1" class="step-button">1</button>
+          <button id="2" class="step-button">2</button>
+          <button id="3" class="step-button">3</button>
+          <button id="4" class="step-button">4</button>
+          <button id="5" class="step-button">5</button>
+          <button id="6" class="step-button">6</button>
         </div>
       </div>
     </div>
@@ -268,6 +458,14 @@
       user-select: none;
       font-family: sans-serif;
       text-align: end;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 10px;
+      position: absolute;
+      top: 75%;
+      left: 70%;
     }
   </style>
 </html>

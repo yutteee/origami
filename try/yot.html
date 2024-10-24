@@ -1,0 +1,310 @@
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <title>折り紙</title>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.167.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.167.0/examples/jsm/",
+          "three/addons/controls/OrbitControls.js": "https://cdn.jsdelivr.net/npm/three@0.167.0/examples/jsm/controls/OrbitControls.js",
+          "three/addons/geometries/TextGeometry.js": "https://cdn.jsdelivr.net/npm/three@0.167.0/examples/jsm/geometries/TextGeometry.js",
+          "three/addons/loaders/FontLoader.js": "https://cdn.jsdelivr.net/npm/three@0.167.0/examples/jsm/loaders/FontLoader.js"
+        }
+      }
+    </script>
+    <script type="module">
+      import * as THREE from "three";
+      import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+      import { procedure } from "./procedure2.js";
+
+      const container = document.querySelector(".container");
+      const canvasEl = document.querySelector("#canvas");
+
+      // パラメータを入力 -------------------------------------------------------------------
+
+      let origami = {
+        params: {
+          width: 36,
+          height: 36,
+        },
+        els: {
+          origami: new THREE.Group(),
+          fixGroup: new THREE.Group(),
+          moveGroup: new THREE.Group(),
+          board1: new THREE.Mesh(),
+          board2: new THREE.Mesh(),
+          board3: new THREE.Mesh(),
+          board4: new THREE.Mesh(),
+          board5: new THREE.Mesh(),
+          board6: new THREE.Mesh(),
+        },
+        animated: {
+          foldingAngle: 0, // 折りたたむ角度、単位はラジアン
+        },
+      };
+
+      let step = 2;
+
+      const boards = {
+        fixBoards: procedure[step].fixBoards,
+        moveBoards: procedure[step].moveBoards,
+      };
+
+      // 回転軸を設定
+      const rotateAxis = new THREE.Vector3(
+        procedure[step].rotateAxis[0][0] - procedure[step].rotateAxis[1][0],
+        procedure[step].rotateAxis[0][1] - procedure[step].rotateAxis[1][1],
+        procedure[step].rotateAxis[0][2] - procedure[step].rotateAxis[1][2]
+      ).normalize();
+
+      // -------------------------------------------------------------------
+
+      let renderer, scene, camera, orbit;
+
+      initScene();
+      window.addEventListener("resize", updateSceneSize);
+
+      function initScene() {
+        renderer = new THREE.WebGLRenderer({
+          alpha: true,
+          antialias: true,
+          canvas: canvasEl,
+        });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+        scene = new THREE.Scene();
+
+        camera = new THREE.PerspectiveCamera(
+          40,
+          container.clientWidth / container.clientHeight,
+          10,
+          1000
+        );
+        camera.position.set(0, 0, 2).multiplyScalar(70);
+
+        updateSceneSize();
+        addAxesAndOrbitControls();
+
+        scene.add(origami.els.origami);
+        setGeometryForBoards();
+
+        createBoardElements();
+
+        render();
+      }
+
+      function addAxesAndOrbitControls() {
+        // x, y, z軸を表示
+        const axesHelper = new THREE.AxesHelper(1000);
+        scene.add(axesHelper);
+
+        // OrbitControlsの設定
+        orbit = new OrbitControls(camera, canvasEl);
+        orbit.enableZoom = false;
+        orbit.enableDamping = true;
+        orbit.autoRotate = false;
+        orbit.autoRotateSpeed = 0.25;
+      }
+
+      function render() {
+        orbit.update();
+        renderer.render(scene, camera);
+        requestAnimationFrame(render);
+      }
+
+      // ウィンドウサイズが変更されたときに呼び出される
+      function updateSceneSize() {
+        camera.aspect = container.clientWidth / container.clientHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(container.clientWidth, container.clientHeight);
+      }
+
+      // それぞれの板を動く板と固定板のグループに追加
+      function setGeometryForBoards() {
+        boards.fixBoards.forEach((board, index) => {
+          origami.els.fixGroup.add(origami.els[`board${index + 1}`]);
+        });
+        boards.moveBoards.forEach((board, index) => {
+          origami.els.moveGroup.add(
+            origami.els[`board${boards.fixBoards.length + index + 1}`]
+          );
+        });
+        origami.els.origami.add(origami.els.fixGroup, origami.els.moveGroup);
+      }
+
+      // 座標から板のジオメトリを設定
+      function createBoardElements() {
+        const origin = procedure[step].rotateAxis[0];
+
+        boards.fixBoards.forEach((board, index) => {
+          const vertices = new Float32Array(board.flat());
+
+          // originが[0, 0, 0]になるように平行移動
+          for (let i = 0; i < vertices.length; i += 3) {
+            vertices[i] -= origin[0];
+            vertices[i + 1] -= origin[1];
+            vertices[i + 2] -= origin[2];
+          }
+
+          origami.els[`board${index + 1}`].geometry =
+            new THREE.BufferGeometry();
+          origami.els[`board${index + 1}`].geometry.setAttribute(
+            "position",
+            new THREE.BufferAttribute(vertices, 3)
+          );
+
+          // 4角形の場合、indexが必要
+          if (board.length >= 4) {
+            origami.els[`board${index + 1}`].geometry.setIndex([
+              0, 1, 2, 2, 3, 0,
+            ]);
+          }
+        });
+
+        boards.moveBoards.forEach((board, index) => {
+          const vertices = new Float32Array(board.flat());
+          // originが[0, 0, 0]になるように平行移動
+          for (let i = 0; i < vertices.length; i += 3) {
+            vertices[i] -= origin[0];
+            vertices[i + 1] -= origin[1];
+            vertices[i + 2] -= origin[2];
+          }
+          origami.els[`board${boards.fixBoards.length + index + 1}`].geometry =
+            new THREE.BufferGeometry();
+          origami.els[
+            `board${boards.fixBoards.length + index + 1}`
+          ].geometry.setAttribute(
+            "position",
+            new THREE.BufferAttribute(vertices, 3)
+          );
+
+          // 4角形の場合、indexが必要
+          if (board.length >= 4) {
+            origami.els[
+              `board${boards.fixBoards.length + index + 1}`
+            ].geometry.setIndex([0, 1, 2, 2, 3, 0]);
+          }
+        });
+
+        // 両面に色をつける
+        const frontMaterial = new THREE.MeshBasicMaterial({
+          color: new THREE.Color(0xff0000),
+          wireframe: false,
+          side: THREE.FrontSide,
+        });
+        const backMaterial = new THREE.MeshBasicMaterial({
+          color: new THREE.Color(0xa9a9a9),
+          wireframe: false,
+          side: THREE.BackSide,
+        });
+
+        boards.fixBoards.forEach((board, index) => {
+          const frontMesh = new THREE.Mesh(
+            origami.els[`board${index + 1}`].geometry,
+            frontMaterial
+          );
+          const backMesh = new THREE.Mesh(
+            origami.els[`board${index + 1}`].geometry,
+            backMaterial
+          );
+          origami.els.fixGroup.add(frontMesh, backMesh);
+        });
+
+        boards.moveBoards.forEach((board, index) => {
+          const frontMesh = new THREE.Mesh(
+            origami.els[`board${boards.fixBoards.length + index + 1}`].geometry,
+            frontMaterial
+          );
+          const backMesh = new THREE.Mesh(
+            origami.els[`board${boards.fixBoards.length + index + 1}`].geometry,
+            backMaterial
+          );
+          origami.els.moveGroup.add(frontMesh, backMesh);
+        });
+
+        updateBoardsTransform();
+      }
+
+      // 折り率に応じて板を折りたたむ(回転する)
+      function updateBoardsTransform() {
+        const quaternion = new THREE.Quaternion();
+        quaternion.setFromAxisAngle(rotateAxis, origami.animated.foldingAngle);
+        origami.els.moveGroup.setRotationFromQuaternion(quaternion);
+
+        // 各boardのワールド座標を確認
+        origami.els.moveGroup.children.forEach((board, index) => {
+          // 更新されたワールド行列を適用
+          board.updateMatrixWorld(true);
+
+          const positionAttribute = board.geometry.attributes.position;
+          const vertex = new THREE.Vector3();
+          const worldPosition = new THREE.Vector3();
+
+          // 各頂点をワールド座標に変換して表示
+          for (let i = 0; i < positionAttribute.count; i++) {
+            vertex.fromBufferAttribute(positionAttribute, i); // 頂点を取得
+            worldPosition.copy(vertex).applyMatrix4(board.matrixWorld); // ワールド座標に変換
+
+            console.log(
+              `Board ${index} Vertex ${i} World Position:`,
+              worldPosition
+            );
+          }
+        });
+      }
+
+      const rangebar = document.getElementById("rangebar");
+
+      rangebar.addEventListener("input", (e) => {
+        const value = e.target.value;
+        origami.animated.foldingAngle = value * (Math.PI / 180);
+        console.log(origami.animated.foldingAngle);
+        updateBoardsTransform();
+      });
+    </script>
+  </head>
+  <body>
+    <div class="page">
+      <div class="container">
+        <canvas id="canvas"></canvas>
+        <div class="ui-controls">
+          0<input
+            type="range"
+            name="radius"
+            aria-label="折りたたむ角度"
+            min="0"
+            max="179.99"
+            value="0"
+            id="rangebar"
+          />180
+        </div>
+      </div>
+    </div>
+  </body>
+  <style>
+    body {
+      padding: 0;
+      margin: 0;
+    }
+    .page {
+      width: 100%;
+      height: 100vh;
+    }
+    .container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100vh;
+    }
+    .container .ui-controls {
+      position: absolute;
+      top: 70%;
+      left: 70%;
+      user-select: none;
+      font-family: sans-serif;
+      text-align: end;
+    }
+  </style>
+</html>

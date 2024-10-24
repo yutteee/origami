@@ -1,0 +1,309 @@
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <title>折り紙</title>
+    <script src="https://cdn.jsdelivr.net/npm/mathjs@13.2.0/lib/browser/math.min.js"></script>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.167.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.167.0/examples/jsm/",
+          "three/addons/controls/OrbitControls.js": "https://cdn.jsdelivr.net/npm/three@0.167.0/examples/jsm/controls/OrbitControls.js",
+          "three/addons/geometries/TextGeometry.js": "https://cdn.jsdelivr.net/npm/three@0.167.0/examples/jsm/geometries/TextGeometry.js",
+          "three/addons/loaders/FontLoader.js": "https://cdn.jsdelivr.net/npm/three@0.167.0/examples/jsm/loaders/FontLoader.js"
+        }
+      }
+    </script>
+    <script type="module">
+      import * as THREE from "three";
+      import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+      const container = document.querySelector(".container");
+      const canvasEl = document.querySelector("#canvas");
+      const yot = {
+        nodes: [
+          [20, 20, 0],
+          [-20, 20, 0],
+          [-20, -20, 0],
+          [20, -20, 0],
+        ],
+        edges: [
+          [0, 1],
+          [1, 2],
+          [2, 3],
+          [0, 3],
+        ],
+        method: [
+          {
+            source: [1], // 動かすノード
+            target: [[20, -20, 0]], // 移動先
+            axis: [0, 2], // 回転軸(右ネジの方向)
+            type: "valley", // 山折りか谷折りか
+            angleRange: [0, 180], // 折る角度 [start, end]
+            newNodes: [], // 新規ノード
+            rmEdges: [], // 削除するエッジ
+            newEdges: [[0, 2]], // 新規エッジ
+          },
+          {
+            source: [1],
+            target: [[20 * (1 - Math.sqrt(2)), 20 * (1 - Math.sqrt(2)), 0]],
+            type: "valley",
+            angleRange: [0, 180],
+            axis: [4, 0],
+            newNodes: [[20 * (3 - 2 * Math.sqrt(2)), -20, 0]],
+            rmEdges: [[1, 2]],
+            newEdges: [
+              [2, 4],
+              [1, 4],
+              [0, 4],
+            ],
+          },
+          {
+            source: [2, 4, 3],
+            target: [
+              [-11.37, 7.99],
+              [7.99, -5.19],
+              [21.69, -14.52],
+            ],
+            axis: [1, 6],
+            type: "valley",
+            angleRange: [0, 180],
+            newNodes: [
+              [6.4088566732975, -12.8119225474817, 0],
+              [20, -17, 0],
+              [20 * (1 - Math.sqrt(2)), 20 * (1 - Math.sqrt(2)), 0],
+            ],
+            newEdges: [
+              [0, 5],
+              [0, 2],
+              [1, 2],
+              [0, 6],
+              [3, 6],
+              [6, 7],
+              [4, 5],
+            ],
+            rmNodes: [],
+            rmEdges: [
+              [0, 4],
+              [0, 3],
+              [0, 2],
+            ],
+          },
+        ],
+      };
+      const methodId = 1;
+      const method = yot.method[methodId];
+      const placeHolder = [];
+
+      let renderer, scene, camera, orbit;
+      initScene();
+      window.addEventListener("resize", updateSceneSize);
+
+      function initScene() {
+        renderer = new THREE.WebGLRenderer({
+          alpha: true,
+          antialias: true,
+          canvas: canvasEl,
+        });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+        scene = new THREE.Scene();
+
+        camera = new THREE.PerspectiveCamera(
+          40, // 視野角
+          container.clientWidth / container.clientHeight, // アスペクト比
+          10, // カメラからの距離（近い）
+          1000 // カメラからの距離（遠い）
+        );
+
+        camera.position.set(0, 0, 2).multiplyScalar(70);
+        updateSceneSize();
+        addAxesAndOrbitControls();
+
+        initOrigami();
+
+        step(0);
+        // step(1);
+        // step(2);
+
+        yot.nodes.push(...method.newNodes);
+        yot.edges.push(...method.newEdges);
+        if (method.rmEdges) {
+          for (let i = 0; i < method.rmEdges.length; i++) {
+            const rmEdge = method.rmEdges[i];
+            yot.edges = yot.edges.filter(
+              (edge) => edge[0] !== rmEdge[0] || edge[1] !== rmEdge[1]
+            );
+          }
+        }
+        for (let i = 0; i < method.source.length; i++) {
+          placeHolder.push(yot.nodes[method.source[i]]);
+        }
+        // 手順1をスライダーで操作する
+        // sourceのNodeをコピーしておく
+
+        render();
+      }
+
+      // ウィンドウサイズが変更されたときに呼び出される
+      function updateSceneSize() {
+        camera.aspect = container.clientWidth / container.clientHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(container.clientWidth, container.clientHeight);
+      }
+
+      // 軸の表示とカメラ制御
+      function addAxesAndOrbitControls() {
+        // 3軸の設定
+        const xAxisMaterial = new THREE.LineBasicMaterial({ color: 0xff0000 });
+        const xAxisGeometry = new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(-100, 0, 0),
+          new THREE.Vector3(100, 0, 0),
+        ]);
+        const xAxis = new THREE.Line(xAxisGeometry, xAxisMaterial);
+        scene.add(xAxis);
+
+        const yAxisMaterial = new THREE.LineBasicMaterial({ color: 0x00ff00 });
+        const yAxisGeometry = new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(0, -100, 0),
+          new THREE.Vector3(0, 100, 0),
+        ]);
+        const yAxis = new THREE.Line(yAxisGeometry, yAxisMaterial);
+        scene.add(yAxis);
+
+        const zAxisMaterial = new THREE.LineBasicMaterial({ color: 0x0000ff });
+        const zAxisGeometry = new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(0, 0, -100),
+          new THREE.Vector3(0, 0, 100),
+        ]);
+        const zAxis = new THREE.Line(zAxisGeometry, zAxisMaterial);
+        scene.add(zAxis);
+
+        // OrbitControlsの設定
+        orbit = new OrbitControls(camera, canvasEl);
+        orbit.enableZoom = false;
+        orbit.enableDamping = true;
+        orbit.autoRotate = false;
+        orbit.autoRotateSpeed = 0.25;
+      }
+
+      function initOrigami() {
+        console.log(yot.nodes);
+        const points = [];
+        for (let i = 0; i < yot.nodes.length; i++) {
+          const node = yot.nodes[i];
+          points.push(new THREE.Vector3(...node));
+        }
+        const lineMaterial = new THREE.LineBasicMaterial({ color: 0xff00ff });
+        for (let i = 0; i < yot.edges.length; i++) {
+          const edge = yot.edges[i];
+          const lineGeometry = new THREE.BufferGeometry().setFromPoints([
+            points[edge[0]],
+            points[edge[1]],
+          ]);
+          const line = new THREE.Line(lineGeometry, lineMaterial);
+          scene.add(line);
+        }
+      }
+
+      function step(id) {
+        scene.children = scene.children.filter(
+          (child) =>
+            child.type === "Line" && child.material.color.getHex() !== 0xff00ff
+        );
+        const method = yot.method[id];
+        const sources = method.source;
+        const targets = method.target;
+        for (let i = 0; i < sources.length; i++) {
+          const source = sources[i];
+          const target = targets[i];
+          yot.nodes[source] = target;
+        }
+        yot.nodes.push(...method.newNodes);
+        yot.edges.push(...method.newEdges);
+        if (method.rmEdges) {
+          for (let i = 0; i < method.rmEdges.length; i++) {
+            const rmEdge = method.rmEdges[i];
+            yot.edges = yot.edges.filter(
+              (edge) => edge[0] !== rmEdge[0] || edge[1] !== rmEdge[1]
+            );
+          }
+        }
+        console.log(yot.nodes);
+        console.log(yot.edges);
+        initOrigami();
+      }
+
+      const step1RangeBar = document.getElementById("rangebar1");
+      step1RangeBar.addEventListener("input", (e) => {
+        // 今表示してある軸以外の線を削除
+        scene.children = scene.children.filter(
+          (child) =>
+            child.type === "Line" && child.material.color.getHex() !== 0xff00ff
+        );
+        const theta = THREE.MathUtils.degToRad(e.target.value);
+        const axisA = new THREE.Vector3(...yot.nodes[method.axis[0]]);
+        const axisB = new THREE.Vector3(...yot.nodes[method.axis[1]]);
+        const axis = new THREE.Vector3().subVectors(axisA, axisB).normalize();
+        for (let i = 0; i < method.source.length; i++) {
+          const source = new THREE.Vector3(...placeHolder[i]);
+          const translatedVector = source.clone().sub(axisA);
+          translatedVector.applyAxisAngle(axis, theta);
+          const rotatedVector = translatedVector.add(axisA);
+          yot.nodes[method.source[i]] = rotatedVector.toArray();
+        }
+        // console.log(yot.nodes);
+        initOrigami();
+      });
+      // レンダリング
+      function render() {
+        orbit.update();
+        renderer.render(scene, camera);
+        requestAnimationFrame(render);
+      }
+    </script>
+  </head>
+  <body>
+    <div class="page">
+      <div class="container">
+        <canvas id="canvas"></canvas>
+        <div class="ui-controls">
+          手順1 0<input
+            type="range"
+            name="radius"
+            aria-label="折りたたむ角度"
+            min="0"
+            max="180"
+            value="0"
+            id="rangebar1"
+          />180<br />
+        </div>
+      </div>
+    </div>
+  </body>
+  <style>
+    body {
+      padding: 0;
+      margin: 0;
+    }
+    .page {
+      width: 100%;
+      height: 100vh;
+    }
+    .container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100vh;
+    }
+    .container .ui-controls {
+      position: absolute;
+      top: 70%;
+      left: 70%;
+      user-select: none;
+      font-family: sans-serif;
+      text-align: end;
+    }
+  </style>
+</html>
